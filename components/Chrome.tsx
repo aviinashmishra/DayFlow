@@ -2,20 +2,19 @@
 import { useEffect, useRef } from 'react';
 import { toast } from '@/lib/client/bus';
 import { clock, haptic } from '@/lib/client/util';
-import { useDayflow, useStore, useUI } from './ctx';
+import { useDayflow, useStore, useUI, type View } from './ctx';
 import { useNow } from './hooks';
 import { Cube, Icon } from './Icons';
 import { Avatar } from './TaskCard';
 import { BellButton } from './Notifications';
 
-function SyncPill() {
-  const s = useDayflow();
+type SyncState = 'offline' | 'saving' | 'synced';
+
+/** Offline-only chip; while online, sync state is shown as a ring around the avatar. */
+function OfflineChip({ text }: { text: string }) {
   const store = useStore();
-  const state = !s.online ? 'offline' : s.pending ? 'saving' : 'synced';
-  const text = state === 'offline' ? `Offline${s.pending ? ` · ${s.pending} queued` : ''}` : state === 'saving' ? 'Saving…' : 'Synced';
-  const title = state === 'offline' ? 'Changes are kept on this device and sync when you are back online.' : state === 'saving' ? 'Saving your changes' : 'All changes saved';
   return (
-    <button className={`sync-pill ${state}`} title={title} aria-live="polite" onClick={() => { void store.flush().then(() => store.refresh()); }}>
+    <button className="offline-chip" title="Changes are kept on this device and sync when you are back online. Click to retry." onClick={() => { void store.flush().then(() => store.refresh()); }}>
       <i aria-hidden="true" /><span>{text}</span>
     </button>
   );
@@ -24,35 +23,33 @@ function SyncPill() {
 /** Shows ⌘ on Apple keyboards, Ctrl elsewhere. */
 const isMac = () => typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
+const VIEWS: View[] = ['board', 'mine', 'org'];
+
 export function TopBar() {
   const s = useDayflow();
-  const store = useStore();
   const ui = useUI();
   const personal = s.org.kind === 'personal';
+  const sync: SyncState = !s.online ? 'offline' : s.pending ? 'saving' : 'synced';
+  const syncText = sync === 'offline' ? `Offline${s.pending ? ` · ${s.pending} queued` : ''}` : sync === 'saving' ? 'Saving…' : 'All changes saved';
   return (
     <header className="topbar">
       <div className="brand">
-        <Cube />
+        <span className="brand-mark"><Cube /></span>
         <span className="brand-name">Dayflow</span>
       </div>
-      <nav className="view-tabs" role="tablist" aria-label="Views">
+      <nav className="view-tabs" role="tablist" aria-label="Views" style={{ ['--i' as string]: Math.max(0, VIEWS.indexOf(ui.view)) }}>
+        <span className="vtab-glide" aria-hidden="true" />
         <button role="tab" className="vtab" aria-selected={ui.view === 'board'} onClick={() => ui.setView('board')}><Icon name="i-board" /><span>Board</span></button>
         <button role="tab" className="vtab" aria-selected={ui.view === 'mine'} onClick={() => ui.setView('mine')}><Icon name="i-list" /><span>My tasks</span></button>
         <button role="tab" className="vtab" aria-selected={ui.view === 'org'} onClick={() => ui.openOrg(ui.orgTab)}><Icon name={personal ? 'i-chart' : 'i-org'} /><span>{personal ? 'Insights' : 'Organization'}</span></button>
       </nav>
       <div className="top-actions">
-        <button className="cmdk-btn" onClick={ui.openPalette} aria-label="Search or run a command (Ctrl K)" title="Search or run a command">
-          <Icon name="i-search" /><span className="cmdk-text">Search or do anything</span><kbd>{isMac() ? '⌘' : 'Ctrl'} K</kbd>
-        </button>
-        <SyncPill />
+        <span className="sr-only" aria-live="polite">{sync === 'synced' ? '' : syncText}</span>
+        {sync === 'offline' && <OfflineChip text={syncText} />}
+        <button className="icon-btn" aria-label={`Search or run a command (${isMac() ? '⌘' : 'Ctrl'} K)`} title={`Search or run a command (${isMac() ? '⌘' : 'Ctrl'} K)`} onClick={ui.openPalette}><Icon name="i-search" /></button>
         <BellButton />
-        <button className="btn btn-3d btn-primary" id="standupBtn" title="Copy standup (S)" onClick={ui.copyStandup}><Icon name="i-copy" /><span>Copy standup</span></button>
-        <button className="icon-btn" aria-label={ui.dark ? 'Switch to light theme' : 'Switch to dark theme'} onClick={() => store.updateSettings({ theme: ui.dark ? 'light' : 'dark' })}>
-          <Icon name={ui.dark ? 'i-sun' : 'i-moon'} />
-        </button>
-        <button className="icon-btn" id="helpBtn" aria-label="Shortcuts and voice tips (?)" onClick={ui.openHelp}><Icon name="i-help" /></button>
-        <button className="me-btn" id="settingsBtn" aria-label="Account and settings" onClick={ui.openSettings}>
-          <Avatar name={s.me.name} /><span>{s.me.name.split(' ')[0]}</span>
+        <button className={`me-btn sync-${sync}`} id="settingsBtn" aria-label={`Account and settings. ${syncText}`} title={`${s.me.name} · ${syncText}`} onClick={ui.openSettings}>
+          <Avatar name={s.me.name} />
         </button>
       </div>
     </header>

@@ -1,10 +1,6 @@
 /* Command palette, team-up wizard, personal space and private-task styles. */
 
 /* ---------- command palette ---------- */
-.cmdk-btn { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 8px 0 12px; border-radius: 12px; font-size: 13px; font-weight: 600; color: var(--muted); background: var(--surface-2); border: 1px solid var(--line); transition: background .2s, color .2s, box-shadow .2s; }
-.cmdk-btn:hover { color: var(--text); background: var(--surface-3); box-shadow: 0 0 0 3px var(--glow); }
-.cmdk-btn svg { width: 16px; height: 16px; }
-.cmdk-btn kbd { margin-left: 6px; }
 
 .pal-back { position: fixed; inset: 0; z-index: 80; display: flex; justify-content: center; align-items: flex-start; padding: 12vh 16px 16px; background: rgba(5, 8, 20, .45); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); animation: fade .15s; }
 .pal { width: min(660px, 100%); max-height: min(560px, 76dvh); display: flex; flex-direction: column; border-radius: 22px; background: var(--surface-solid); box-shadow: var(--shadow-3), 0 0 0 1px var(--line), 0 0 80px -20px var(--glow); overflow: hidden; animation: palIn .32s cubic-bezier(.2,.9,.25,1.15); transform-origin: 50% 0; }
@@ -114,8 +110,6 @@
 .tu-done .modal-actions { width: 100%; }
 
 @media (max-width: 760px) {
-  .cmdk-btn { padding: 0; width: 40px; justify-content: center; }
-  .cmdk-btn .cmdk-text, .cmdk-btn kbd { display: none; }
   .pal-back { padding: 10px 10px 0; }
   .pal { max-height: 80dvh; }
   .pal-foot { display: none; }
