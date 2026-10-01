@@ -49,34 +49,12 @@ export function TaskCard({ t, members, timer, isNew, draggable, onDragStart, onD
   const assignee = memberName(members, t.assigneeId);
   const label = [t.title, STATUS_NAMES[t.status], `${PRI_LABEL[t.priority]} priority`, due?.label, assignee && `assigned to ${assignee}`, t.status === 2 && t.blockedReason && `blocked: ${t.blockedReason}`].filter(Boolean).join('. ');
 
-  // ---- 3D tilt with a glare that follows the pointer (mouse only)
-  const tilt = (e: React.PointerEvent) => {
-    if (e.pointerType !== 'mouse' || ui.flat || !card.current) return;
-    const el = card.current;
-    const r = el.getBoundingClientRect();
-    const px = (e.clientX - r.left) / r.width, py = (e.clientY - r.top) / r.height;
-    el.classList.add('tilting');
-    el.style.setProperty('--ry', `${((px - 0.5) * 12).toFixed(2)}deg`);
-    el.style.setProperty('--rx', `${((0.5 - py) * 10).toFixed(2)}deg`);
-    el.style.setProperty('--gx', `${(px * 100).toFixed(1)}%`);
-    el.style.setProperty('--gy', `${(py * 100).toFixed(1)}%`);
-  };
-  const untilt = () => {
-    const el = card.current;
-    if (!el) return;
-    el.classList.remove('tilting');
-    el.style.removeProperty('--rx');
-    el.style.removeProperty('--ry');
-  };
-
   // ---- touch swipe: right = next level, left = previous level (phone layout)
   const down = (e: React.PointerEvent) => {
-    untilt();
     if (e.pointerType === 'mouse' || !ui.phone) return;
     swipe.current = { x: e.clientX, y: e.clientY, dx: 0, active: false, pid: e.pointerId, target: null };
   };
   const move = (e: React.PointerEvent) => {
-    tilt(e);
     const s = swipe.current;
     if (!s || e.pointerId !== s.pid || !card.current || !hint.current) return;
     const dx = e.clientX - s.x, dy = e.clientY - s.y;
@@ -176,18 +154,12 @@ export function TaskCard({ t, members, timer, isNew, draggable, onDragStart, onD
         onClick={click}
         onKeyDown={key}
         onPointerMove={move}
-        onPointerLeave={untilt}
         onPointerDown={down}
         onPointerUp={end}
         onPointerCancel={end}
-        onDragStart={(e) => { untilt(); onDragStart(e, t.id); }}
+        onDragStart={(e) => onDragStart(e, t.id)}
         onDragEnd={onDragEnd}
       >
-        <div className="card-top">
-          <span className="pri"><i aria-hidden="true">{PRI_GLYPH[t.priority]}</i>{PRI_LABEL[t.priority]}</span>
-          {t.source === 'voice' && <span className="src" title="Added by voice"><Icon name="i-mic" /></span>}
-          <button className="icon-btn" data-act="open" aria-label="Open details"><Icon name="i-more" /></button>
-        </div>
         <h3 className="card-title">{t.title}</h3>
         {t.description && <p className="card-desc">{t.description}</p>}
         {t.status === 2 && (
@@ -199,9 +171,10 @@ export function TaskCard({ t, members, timer, isNew, draggable, onDragStart, onD
             </div>
           </div>
         )}
-        {((showPrivate && t.private) || team || assignee || due || t.tags.length > 0 || t.project || t.commentCount > 0 || t.attachmentCount > 0 || t.links.length > 0) && (
+        {(t.priority === 'high' || (showPrivate && t.private) || team || assignee || due || t.tags.length > 0 || t.project || t.commentCount > 0 || t.attachmentCount > 0 || t.links.length > 0) && (
           <div className="meta">
-            {showPrivate && t.private && <span className="team-chip private-chip" title="Private: only you can see this"><Icon name="i-lock" />Private</span>}
+            {t.priority === 'high' && <span className="pri-chip">{PRI_GLYPH.high} {PRI_LABEL.high}</span>}
+            {showPrivate && t.private && <span className="mini" title="Private: only you can see this"><Icon name="i-lock" /><span className="sr-only">Private</span></span>}
             {team && <span className="team-chip" title={`${team.name} team`}><i className="team-dot" style={{ background: team.color }} aria-hidden="true" />{team.name}</span>}
             {assignee && <Avatar name={assignee} />}
             {due && <span className={`due ${due.cls}`}><Icon name="i-cal" />{due.label}</span>}
@@ -218,11 +191,10 @@ export function TaskCard({ t, members, timer, isNew, draggable, onDragStart, onD
               <button key={name} className={`lv${i <= t.status ? ' on' : ''}`} data-lv={i} style={{ ['--lc' as string]: `var(--st${i})` }} aria-label={`Level ${i + 1}: ${name}`} aria-pressed={i === t.status} title={name} />
             ))}
           </div>
-          <span className="lv-label" title={STATUS_NAMES[t.status]}><Icon name={`s${t.status}`} /><span className="sr-only">{STATUS_NAMES[t.status]}</span></span>
           {t.status !== 4 && (
             <button className={`timer-btn${timerOn ? ' on' : ''}`} data-act="timer" aria-label={`${timerOn ? 'Pause' : 'Start'} focus timer`}>
               <Icon name={timerOn ? 'i-pause' : 'i-play'} />
-              <span className="tt">{timerOn && timer ? <TimerText startedAt={timer.startedAt} /> : t.timeSpent >= 60 ? fmtDuration(t.timeSpent) : 'Focus'}</span>
+              {(timerOn || t.timeSpent >= 60) && <span className="tt">{timerOn && timer ? <TimerText startedAt={timer.startedAt} /> : fmtDuration(t.timeSpent)}</span>}
             </button>
           )}
         </div>

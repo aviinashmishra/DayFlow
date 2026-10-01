@@ -2,7 +2,7 @@ import 'server-only';
 import { z } from 'zod';
 import { HttpError } from './http';
 import type { Status } from '../types';
-import type { StoryTask } from '../voice';
+import type { StoryOpenTask, StoryTask } from '../voice';
 
 /*
  * Turns a spoken "story" ("this morning I fixed the login bug, now I'm on the
@@ -24,6 +24,8 @@ export interface StoryInput {
   today: string; // YYYY-MM-DD in the speaker's time zone
   weekday: string;
   team: string[];
+  /** Open tasks on the speaker's board. Gemini sees them as T1, T2… and never their ids. */
+  open: StoryOpenTask[];
 }
 
 export function geminiConfigured(): boolean {
@@ -45,7 +47,8 @@ const RESPONSE_SCHEMA = {
           due: { type: 'STRING', nullable: true },
           assignee: { type: 'STRING', nullable: true },
           tags: { type: 'ARRAY', items: { type: 'STRING' } },
-          blockedReason: { type: 'STRING', nullable: true }
+          blockedReason: { type: 'STRING', nullable: true },
+          match: { type: 'STRING', nullable: true }
         },
         required: ['title', 'status', 'priority']
       }
@@ -62,14 +65,21 @@ const reply = z.object({
     due: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullish().catch(null),
     assignee: z.string().nullish().catch(null),
     tags: z.array(z.string()).nullish().catch(null),
-    blockedReason: z.string().nullish().catch(null)
+    blockedReason: z.string().nullish().catch(null),
+    match: z.string().nullish().catch(null)
   })).max(40)
 });
 
 function instructions(input: StoryInput): string {
   const team = input.team.length ? input.team.join(', ') : '(none)';
+  const open = input.open.length
+    ? input.open.map((t, i) => `T${i + 1} [${STATUS_KEYS[t.status]}] ${t.title.replace(/\s+/g, ' ')}`).join('\n')
+    : '(none)';
   return `You turn a person's spoken work update into a clean task list for a task board.
 Today is ${input.weekday}, ${input.today}. Teammates: ${team}.
+
+Tasks already on their board:
+${open}
 
 Rules:
 - Find every distinct piece of work the speaker has done, is doing, or plans to do. Split lists ("I emailed Priya and updated the deck") into separate tasks. Merge repeats of the same work into one task.
@@ -86,6 +96,7 @@ Rules:
 - due: YYYY-MM-DD when a day is mentioned or clearly implied ("tomorrow", "by Friday", "kal"), worked out from today's date; otherwise null. Leave it null for done tasks.
 - assignee: a teammate's name from the list, only when the work is handed to them ("ask Priya to…", "Rahul will…"); otherwise null.
 - tags: at most 3 short lowercase topic words, only when obvious. Otherwise an empty list.
+- match: when a piece of work is clearly the same as one of the tasks already on the board ("I finished the login fix" and "T2 [in_progress] Fix login crash"), set match to that task's label, such as "T2", and give its new status. Use each label at most once. When in doubt, or for new work, match is null.
 - If there is no work at all, return an empty list.`;
 }
 
@@ -135,11 +146,17 @@ export async function classifyStory(input: StoryInput): Promise<StoryTask[]> {
   }
 
   const seen = new Set<string>();
+  const matched = new Set<string>();
   const out: StoryTask[] = [];
   for (const t of parsed.tasks) {
-    const title = t.title.replace(/\s+/g, ' ').trim().slice(0, 300);
+    // "T3" → the third open task. Unknown or repeated labels fall back to a new task.
+    const ref = /^T(\d+)$/i.exec(t.match?.trim() ?? '');
+    const existing = ref ? input.open[Number(ref[1]) - 1] : undefined;
+    const existingId = existing && !matched.has(existing.id) ? existing.id : null;
+    if (existingId) matched.add(existingId);
+    const title = (existingId ? existing!.title : t.title).replace(/\s+/g, ' ').trim().slice(0, 300);
     const k = title.toLowerCase();
-    if (!title || seen.has(k)) continue;
+    if (!title || (!existingId && seen.has(k))) continue;
     seen.add(k);
     const status = STATUS_KEYS.indexOf(t.status) as Status;
     // Only teammates Dayflow knows can be assigned; anything else stays unassigned.
@@ -151,7 +168,8 @@ export async function classifyStory(input: StoryInput): Promise<StoryTask[]> {
       due: status === 4 ? null : t.due ?? null,
       assignee,
       tags: [...new Set((t.tags ?? []).map((x) => x.toLowerCase().replace(/[^\p{L}\p{N}_-]+/gu, '')).filter(Boolean))].slice(0, 3),
-      blockedReason: status === 2 ? t.blockedReason?.trim().slice(0, 300) || null : null
+      blockedReason: status === 2 ? t.blockedReason?.trim().slice(0, 200) || null : null,
+      existingId
     });
   }
   return out;

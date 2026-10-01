@@ -26,8 +26,6 @@ function useFiltered(): Task[] {
       if (c === 'overdue' && !(t.dueDate && t.dueDate < today && t.status !== 4)) return false;
       if (c === 'today' && t.dueDate !== today) return false;
       if (c === 'mine' && !isMine(t, s.me.id)) return false;
-      if (c.startsWith('tag:') && !t.tags.includes(c.slice(4))) return false;
-      if (c.startsWith('person:') && t.assigneeId !== c.slice(7)) return false;
       return tokens.every((tok) => {
         if (tok.startsWith('#')) return t.tags.some((x) => x.startsWith(tok.slice(1)));
         if (tok.startsWith('@')) return name(t.assigneeId).startsWith(tok.slice(1));
@@ -44,9 +42,33 @@ function exportPreset(chip: string, search: string, boardTeam: string): Partial<
   else if (chip === 'high') p.priorities = ['high'];
   else if (chip === 'today') p.due = 'today';
   else if (chip === 'overdue') p.due = 'overdue';
-  else if (chip.startsWith('tag:')) p.tags = [chip.slice(4)];
-  else if (chip.startsWith('person:')) p.assignees = [chip.slice(7)];
   return p;
+}
+
+/** Team switcher: the whole organization, your private tasks, one team, or tasks without a team. */
+function TeamSelect() {
+  const s = useDayflow();
+  const ui = useUI();
+  if (s.org.kind === 'personal') return null;
+  const count = (test: (t: Task) => boolean) => s.tasks.filter((t) => t.status !== 4 && test(t)).length;
+  const privateN = count((t) => t.private);
+  if (!s.teams.length && !privateN) return null;
+  const mine = new Set(s.me.teams.map((m) => m.teamId));
+  // Your teams first, then the rest.
+  const teams = [...s.teams].sort((a, b) => Number(mine.has(b.id)) - Number(mine.has(a.id)) || a.name.localeCompare(b.name));
+  const loose = count((t) => !t.teamId && !t.private);
+  return (
+    <label className="team-select">
+      <span className="sr-only">Team</span>
+      <Icon name="i-users" />
+      <select value={ui.boardTeam} onChange={(e) => ui.setBoardTeam(e.target.value)}>
+        <option value="all">All teams · {count(() => true)}</option>
+        <option value="personal">Personal · {privateN}</option>
+        {teams.map((t) => <option key={t.id} value={t.id}>{t.name} · {count((x) => x.teamId === t.id)}</option>)}
+        {(loose > 0 || ui.boardTeam === 'none') && <option value="none">No team · {loose}</option>}
+      </select>
+    </label>
+  );
 }
 
 function Toolbar() {
@@ -54,69 +76,31 @@ function Toolbar() {
   const ui = useUI();
   const today = todayISO();
   const overdue = s.tasks.filter((t) => t.dueDate && t.dueDate < today && t.status !== 4).length;
-  const tags = [...new Set(s.tasks.flatMap((t) => t.tags))].slice(0, 6);
-  const people = s.members.filter((m) => m.id !== s.me.id && s.tasks.some((t) => t.assigneeId === m.id)).slice(0, 6);
   const chips: Array<[string, React.ReactNode]> = [
     ['all', 'All'],
     ['mine', 'Mine'],
-    ['high', '▲ High priority'],
+    ['high', 'High priority'],
     ['today', 'Due today'],
-    ['overdue', <>Overdue{overdue ? <span className="n">{overdue}</span> : null}</>],
-    ...tags.map((t): [string, React.ReactNode] => [`tag:${t}`, `#${t}`]),
-    ...people.map((p): [string, React.ReactNode] => [`person:${p.id}`, `@${p.name.split(' ')[0]}`])
+    ['overdue', <>Overdue{overdue ? <span className="n">{overdue}</span> : null}</>]
   ];
   const active = chips.some(([k]) => k === ui.chip) ? ui.chip : 'all';
   return (
     <section className="toolbar" aria-label="Filters">
-      <div className="search glass">
+      <div className="search">
         <Icon name="i-search" />
         <label htmlFor="search" className="sr-only">Search tasks</label>
-        <input id="search" type="search" placeholder="Search tasks, #tags, @people  ( / )" value={ui.search} onChange={(e) => ui.setSearch(e.target.value)} />
+        <input id="search" type="search" placeholder="Search tasks, #tags, @people" value={ui.search} onChange={(e) => ui.setSearch(e.target.value)} />
       </div>
+      <TeamSelect />
       <div className="chips" role="group" aria-label="Quick filters">
         {chips.map(([k, label]) => (
           <button key={k} className="chip" aria-pressed={active === k} onClick={() => ui.setChip(active === k ? 'all' : k)}>{label}</button>
         ))}
       </div>
-      <button className="btn btn-ghost toolbar-export" title="Export to Excel, PDF or CSV (E)" onClick={() => ui.openExport(exportPreset(active, ui.search, ui.boardTeam))}>
-        <Icon name="i-download" /><span>Export</span>
+      <button className="icon-btn toolbar-export" aria-label="Export (E)" title="Export to Excel, PDF or CSV (E)" onClick={() => ui.openExport(exportPreset(active, ui.search, ui.boardTeam))}>
+        <Icon name="i-download" />
       </button>
     </section>
-  );
-}
-
-/** Team switcher: the whole organization, your private tasks, one team, or tasks without a team. */
-function TeamScope() {
-  const s = useDayflow();
-  const ui = useUI();
-  const count = (test: (t: Task) => boolean) => s.tasks.filter((t) => t.status !== 4 && test(t)).length;
-  if (s.org.kind === 'personal') {
-    return (
-      <nav className="scope-bar" aria-label="Space">
-        <span className="scope-solo"><Icon name="i-lock" />Just you · {count(() => true)} open · everything here is private</span>
-        <button className="scope-pill scope-cta" onClick={ui.openTeamUp}><Icon name="i-users" />Create a team</button>
-      </nav>
-    );
-  }
-  const privateN = count((t) => t.private);
-  if (!s.teams.length && !privateN) return null;
-  const mine = new Set(s.me.teams.map((m) => m.teamId));
-  // Your teams first, then the rest.
-  const teams = [...s.teams].sort((a, b) => Number(mine.has(b.id)) - Number(mine.has(a.id)) || a.name.localeCompare(b.name));
-  const loose = count((t) => !t.teamId && !t.private);
-  const pill = (key: string, label: React.ReactNode, n: number, color?: string) => (
-    <button key={key} className="scope-pill" aria-pressed={ui.boardTeam === key} style={color ? { ['--tc' as string]: color } : undefined} onClick={() => ui.setBoardTeam(key)}>
-      {label}<span className="n">{n}</span>
-    </button>
-  );
-  return (
-    <nav className="scope-bar" aria-label="Team">
-      <span className="scope-label">Team</span>
-      {pill('all', 'All teams', count(() => true))}
-      {pill('personal', <><Icon name="i-lock" className="scope-lock" />Personal</>, privateN)}
-      {teams.map((t) => pill(t.id, <><i className="team-dot" style={{ background: t.color }} aria-hidden="true" />{t.name}</>, count((x) => x.teamId === t.id), t.color))}
-      {(loose > 0 || ui.boardTeam === 'none') && pill('none', 'No team', loose)}
-    </nav>
   );
 }
 
@@ -223,7 +207,6 @@ export function BoardView() {
 
   return (
     <>
-      <TeamScope />
       <Toolbar />
       <ColTabs list={list} />
       <section
@@ -279,7 +262,6 @@ export function BoardView() {
           );
         })}
       </section>
-      <p className="swipe-tip">Swipe a card → to move it up a level, ← to move it back.</p>
     </>
   );
 }

@@ -2,16 +2,11 @@
 
 .team-dot { display: inline-block; flex: none; border-radius: 50%; box-shadow: 0 0 0 2px color-mix(in srgb, var(--surface-solid) 70%, transparent); }
 
-/* ---------- board team scope ---------- */
-.scope-bar { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; overflow-x: auto; scrollbar-width: none; padding: 2px 0; }
-.scope-bar::-webkit-scrollbar { display: none; }
-.scope-bar .scope-label { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); flex: none; }
-.scope-pill { display: inline-flex; align-items: center; gap: 7px; min-height: 36px; padding: 6px 13px; border-radius: 999px; font-size: 13px; font-weight: 700; color: var(--text-2); background: var(--surface-2); border: 1px solid var(--line); white-space: nowrap; transition: background .2s, border-color .2s, color .2s; }
-.scope-pill:hover { background: var(--surface-3); color: var(--text); }
-.scope-pill[aria-pressed="true"] { color: var(--text); background: color-mix(in srgb, var(--tc, var(--accent)) 16%, var(--surface-solid)); border-color: color-mix(in srgb, var(--tc, var(--accent)) 60%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--tc, var(--accent)) 30%, transparent); }
-.scope-pill .n { font-size: 11px; padding: 1px 6px; border-radius: 999px; background: var(--surface-3); }
-.team-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 700; padding: 3px 8px; border-radius: 999px; background: var(--surface-3); color: var(--text-2); max-width: 100%; }
+/* ---------- team chips (cards, rows) ---------- */
+.team-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); color: var(--text-2); max-width: 100%; }
 .team-chip .team-dot { width: 8px; height: 8px; }
+.team-chip.private-chip { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.team-chip.private-chip svg { width: 11px; height: 11px; }
 
 /* ---------- header & tabs ---------- */
 .org-hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }

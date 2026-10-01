@@ -196,26 +196,32 @@ function Shell({ store }: { store: DayflowStore }) {
   copyStandupRef.current = copyStandup;
 
   // ---- feedback after new tasks land (typed, spoken, or sorted from a story)
-  const showAdded = useCallback((created: Task[], unknown: string[], source: Source, story = false) => {
+  const showAdded = useCallback((created: Task[], unknown: string[], source: Source, story = false, updated: Task[] = []) => {
     const st = store.getState();
     haptic(st.me.settings.haptics, 10);
+    const all = [...created, ...updated];
     const n = created.length;
-    announce(n > 1 ? `Added ${n} tasks` : `Added ${created[0].title}`);
     if (story) {
-      // "Added 4 tasks from your story: 2 done, 1 in progress, 1 queued"
-      const counts = ([4, 1, 3, 2, 0] as Status[]).map((k) => [k, created.filter((c) => c.status === k).length] as const).filter(([, c]) => c);
+      // "Added 2 and updated 2 from your story: 2 done, 1 in progress, 1 queued"
+      const counts = ([4, 1, 3, 2, 0] as Status[]).map((k) => [k, all.filter((c) => c.status === k).length] as const).filter(([, c]) => c);
       const split = counts.map(([k, c]) => `${c} ${STATUS_NAMES[k].toLowerCase()}`).join(', ');
-      toast(n > 1 ? `Added ${n} tasks from your story: ${split}` : `Added “${created[0].title}” (${STATUS_NAMES[created[0].status].toLowerCase()})`, { icon: 'i-sparkle', undo: doUndo, timeout: 7000 });
+      const what = n && updated.length ? `Added ${n} and updated ${updated.length}` : n ? `Added ${n} tasks` : `Updated ${updated.length} tasks`;
+      const one = all[0];
+      const msg = all.length > 1 ? `${what} from your story: ${split}`
+        : updated.length ? `Moved “${one.title}” to ${STATUS_NAMES[one.status]}` : `Added “${one.title}” (${STATUS_NAMES[one.status].toLowerCase()})`;
+      announce(msg);
+      toast(msg, { icon: 'i-sparkle', undo: doUndo, timeout: 7000 });
     } else {
+      announce(n > 1 ? `Added ${n} tasks` : `Added ${created[0].title}`);
       toast(n > 1 ? `Added ${n} tasks${source === 'voice' ? ' by voice' : ''}` : `Added “${created[0].title}”`, { icon: source === 'voice' ? 'i-mic' : 'i-plus', undo: doUndo });
     }
     if (unknown.length) {
       if (st.org.kind === 'personal') toast(`It's just you here so far, so “${unknown.join(', ')}” was left out. Create a team to hand work to people.`, { icon: 'i-users', timeout: 8000, actions: [{ label: 'Create a team', fn: openTeamUp }] });
       else toast(`No teammate named ${unknown.join(', ')}, so it was left unassigned. Invite them from Organization → People.`, { icon: 'i-users', timeout: 7000 });
     }
-    if (phone) setMobileCol(created[0].status);
+    if (phone) setMobileCol(all[0].status);
     setViewState('board');
-    const doneOne = created.find((c) => c.status === 4);
+    const doneOne = all.find((c) => c.status === 4);
     if (doneOne) {
       setTimeout(() => {
         const r = document.querySelector(`.card[data-id="${doneOne.id}"]`)?.getBoundingClientRect();
@@ -278,40 +284,81 @@ function Shell({ store }: { store: DayflowStore }) {
 
   // ---- spoken story → Gemini splits it into tasks and sorts each by status
   const aiOff = useRef(false);
+  // A story Gemini could not sort. Pressing Enter on it again adds it with the local parser instead of retrying.
+  const skipAi = useRef<string | null>(null);
+  const sorting = useRef(false);
   const noteRef = useRef<(msg: string | null, error?: boolean) => void>(() => {});
-  const tellStory = useCallback(async (story: string) => {
+  const tellStory = useCallback(async (story: string, source: Source) => {
+    if (sorting.current) return;
+    sorting.current = true;
     const st = store.getState();
     const now = new Date();
     const team = st.members.filter((m) => m.active).map((m) => m.name);
+    // Your open work, newest first, so "I finished the login fix" moves that card instead of adding a copy.
+    const open = st.tasks
+      .filter((t) => t.status !== 4 && (t.assigneeId === st.me.id || (!t.assigneeId && t.creatorId === st.me.id)))
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, 80)
+      .map((t) => ({ id: t.id, title: t.title, status: t.status }));
     noteRef.current('Sorting your story into tasks…');
     try {
       const { tasks } = await api<{ tasks: StoryTask[] }>('POST', '/api/voice/classify', {
-        text: story, today: iso(now), weekday: now.toLocaleDateString('en-US', { weekday: 'long' }), team
+        text: story, today: iso(now), weekday: now.toLocaleDateString('en-US', { weekday: 'long' }), team, open
       });
       noteRef.current(null);
       if (!tasks.length) {
+        skipAi.current = story.trim();
+        setText(story);
         toast('Didn’t hear any work in that. Edit it and press Enter to add it anyway.', { icon: 'i-mic', timeout: 7000 });
         return;
       }
-      const { created, unknown } = store.addTasks(tasks.map((x) => ({ ...x, project: null, raw: story })), 'voice');
+      const me = store.getState().me;
+      const updated: Task[] = [];
+      const fresh: StoryTask[] = [];
+      let added: { created: Task[]; unknown: string[] } = { created: [], unknown: [] };
+      store.undoGroup('Story', () => {
+        for (const x of tasks) {
+          const t = x.existingId ? store.get(x.existingId) : undefined;
+          if (!t || !canManageTask(me, t)) { if (!x.existingId || !t) fresh.push(x); continue; }
+          if (t.status === x.status) continue;
+          const changes: TaskChanges = { status: x.status };
+          if (x.status === 2 && x.blockedReason) changes.blockedReason = x.blockedReason;
+          const next = store.updateTask(t.id, changes, { label: `Move to ${STATUS_NAMES[x.status]}` });
+          if (next) { updated.push(next); feedback(t, x.status, document.querySelector(`.card[data-id="${t.id}"]`)?.getBoundingClientRect() ?? null); }
+        }
+        if (fresh.length) added = store.addTasks(fresh.map((x) => ({ ...x, project: null, raw: story })), source);
+      });
       setText((cur) => (cur.trim() === story.trim() ? '' : cur));
-      showAdded(created, unknown, 'voice', true);
+      if (added.created.length || updated.length) showAdded(added.created, added.unknown, source, true, updated);
+      else toast('Your board already matches that story. Nothing to change.', { icon: 'i-sparkle', timeout: 6000 });
     } catch (err) {
       noteRef.current(null);
       if (err instanceof ApiError && err.status === 503) {
         // Story mode isn't set up on this server: fall back to the instant parser from now on.
         aiOff.current = true;
-        if (!commit(story, 'voice')) toast(`Couldn't find a task in “${story}”. Edit it and press Enter.`, { icon: 'i-mic', timeout: 7000 });
+        if (!commit(story, source)) toast(`Couldn't find a task in “${story}”. Edit it and press Enter.`, { icon: 'i-mic', timeout: 7000 });
         return;
       }
+      skipAi.current = story.trim();
+      setText(story);
       toast(err instanceof Error ? err.message : 'Could not sort that story. Press Enter to add it as typed.', { icon: 'i-mic', timeout: 8000 });
       setTimeout(() => document.getElementById('captureInput')?.focus(), 0);
+    } finally {
+      sorting.current = false;
     }
-  }, [store, showAdded, commit]);
+  }, [store, showAdded, commit, feedback]);
+
+  // Typed or spoken: a story goes to Gemini, everything else to the instant parser.
+  const capture = useCallback((raw: string, source: Source): boolean => {
+    const t = raw.trim();
+    if (sorting.current) return true;
+    if (t && !aiOff.current && t !== skipAi.current && looksLikeStory(t)) { void tellStory(t, source); return true; }
+    if (t === skipAi.current) skipAi.current = null;
+    return commit(raw, source);
+  }, [commit, tellStory]);
 
   const voice = useVoice(settings.lang, setText, (final) => {
-    if (!aiOff.current && looksLikeStory(final)) { void tellStory(final); return; }
-    if (!commit(final, 'voice')) {
+    if (!capture(final, 'voice')) {
       toast(`Couldn't find a task in “${final}”. Edit it and press Enter.`, { icon: 'i-mic', timeout: 7000 });
       setTimeout(() => document.getElementById('captureInput')?.focus(), 0);
     }
@@ -379,11 +426,11 @@ function Shell({ store }: { store: DayflowStore }) {
     openExport: (preset: Partial<ExportOptions> = {}) => { setDetailId(null); setSettingsOpen(false); setExporting(preset); },
     openStandup, openHelp: () => setHelpOpen(true), copyStandup: () => void copyStandup(),
     clearDone, deleteTask, doUndo, feedback, changeStatus,
-    capture: { text, setText, commit },
+    capture: { text, setText, commit: capture },
     voice,
     focusAfterRender: (id: string) => { pendingFocus.current = id; },
     takePendingFocus: () => { const f = pendingFocus.current; pendingFocus.current = null; return f; }
-  }), [view, setView, orgTab, openOrg, openTeamUp, boardTeam, setBoardTeam, search, chip, mobileCol, selectCol, bumped, phone, flat, dark, openStandup, copyStandup, clearDone, deleteTask, doUndo, feedback, changeStatus, text, commit, voice]);
+  }), [view, setView, orgTab, openOrg, openTeamUp, boardTeam, setBoardTeam, search, chip, mobileCol, selectCol, bumped, phone, flat, dark, openStandup, copyStandup, clearDone, deleteTask, doUndo, feedback, changeStatus, text, capture, voice]);
 
   return (
     <UICtx.Provider value={ui}>

@@ -27,13 +27,6 @@
 .pal-foot-r { margin-left: auto; }
 
 /* ---------- personal space & private tasks ---------- */
-.scope-solo { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--text-2); white-space: nowrap; }
-.scope-solo svg, .scope-lock { width: 15px; height: 15px; color: var(--accent); }
-.scope-pill.scope-cta { margin-left: auto; color: #fff; border-color: transparent; background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 6px 18px -8px var(--glow); }
-.scope-pill.scope-cta:hover { color: #fff; filter: brightness(1.08); }
-.scope-pill.scope-cta svg { width: 15px; height: 15px; }
-.team-chip.private-chip { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
-.team-chip.private-chip svg { width: 11px; height: 11px; }
 .private-note { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0; padding: 10px 12px; border-radius: 12px; font-size: 13.5px; color: var(--text-2); background: color-mix(in srgb, var(--accent) 8%, transparent); border: 1px dashed color-mix(in srgb, var(--accent) 40%, transparent); }
 .private-note svg { width: 16px; height: 16px; color: var(--accent); }
 .private-note .link-btn { margin-left: auto; }
@@ -120,7 +113,6 @@
   .teamup-cta .btn { width: 100%; }
   .tu-link { flex-wrap: wrap; }
   .tu-link .btn { flex: 1; }
-  .scope-solo { font-size: 12px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .tu-card, .tu-orbit i, .teamup-cta-art span, .auth-mode[aria-checked="true"]::after { animation: none; }

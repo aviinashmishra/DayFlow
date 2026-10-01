@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { afterWake, stripEnd, wordCount } from '@/lib/voice';
+import { afterWake, soundsLikeStory, stripEnd, wordCount } from '@/lib/voice';
 import type { VoiceApi, WakeState } from './ctx';
 
 export function useMedia(query: string): boolean {
@@ -47,9 +47,9 @@ interface SpeechRecognitionLike {
 
 // Pause length that ends a tap-to-talk recording. Long enough to think between "next task"s.
 const SILENCE_MS = 3500;
-// After "Hey Dayflow": a short line ends quickly; a longer story gets room to breathe between sentences.
+// After "Hey Dayflow": a short command ends quickly; a story (or one that is starting) gets room to breathe between sentences.
 const WAKE_SHORT_MS = 1400;
-const WAKE_STORY_MS = 2600;
+const WAKE_STORY_MS = 3200;
 const WAKE_INTERIM_EXTRA_MS = 1000;
 const WAKE_EMPTY_MS = 7000;
 const HARD_MS = 90000;
@@ -277,7 +277,7 @@ export function useVoice(lang: string, onText: (t: string) => void, onFinal: (t:
       const n = wordCount(text);
       const wait = s.kind === 'manual' ? SILENCE_MS
         : !n ? WAKE_EMPTY_MS
-        : (n < 10 ? WAKE_SHORT_MS : WAKE_STORY_MS) + (last?.isFinal ? 0 : WAKE_INTERIM_EXTRA_MS);
+        : (n < 10 && !soundsLikeStory(text) ? WAKE_SHORT_MS : WAKE_STORY_MS) + (last?.isFinal ? 0 : WAKE_INTERIM_EXTRA_MS);
       silence.current = setTimeout(finish, wait);
     };
     r.onerror = (e) => {

@@ -133,7 +133,7 @@ export function SettingsSheet({ open, onClose }: { open: boolean; onClose: () =>
             <button key={v} aria-pressed={s.me.settings.theme === v} onClick={() => store.updateSettings({ theme: v })}>{v[0].toUpperCase() + v.slice(1)}</button>
           ))}
         </div>
-        <Switch k="effects3d" title="3D effects" sub="Card tilt, animated orb and depth. Turns off automatically with reduced motion." />
+        <Switch k="effects3d" title="Motion effects" sub="Card animations and background glow. Turns off automatically with reduced motion." />
         <Switch k="haptics" title="Haptic feedback" sub="Small vibrations on phones" />
       </div>
 

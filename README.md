@@ -41,7 +41,7 @@ Generate a secret with `node -e "console.log(require('crypto').randomBytes(32).t
 4. On the **Board**, use the **Team** switcher to view one team or all of them. New tasks go to the team you are viewing.
 5. Speak or type tasks. Say "next task" between tasks to add several at once.
    - **Hands-free:** on a computer, once you have allowed the microphone, say **"Hey Dayflow"** followed by a task. When you pause, it is added. Saying "that's it" adds it straight away. It only listens while the tab is visible, and you can turn it off in Settings → Voice.
-   - **Tell your day:** after "Hey Dayflow" (or the mic), describe what you did, what you're doing and what's next, for example: "I fixed the login crash and sent the invoice, now I'm on the pricing page, and tomorrow I need to call the vendor." Gemini splits it into separate tasks and files each one as Done, In progress, Blocked, Review or Queued.
+   - **Tell your day:** after "Hey Dayflow" (or the mic), describe what you did, what you're doing and what's next, for example: "I fixed the login crash and sent the invoice, now I'm on the pricing page, and tomorrow I need to call the vendor." Gemini splits it into separate tasks and files each one as Done, In progress, Blocked, Review or Queued. Work that is already on your board is moved instead of added again, so "I finished the login crash" moves that card to Done. A typed story works the same way, and one Undo reverts the whole story.
 6. The **bell** shows notifications:
    - someone assigned you work or asked for your review;
    - someone @mentioned you or commented on your task;

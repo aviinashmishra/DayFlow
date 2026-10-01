@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { body, HttpError, json, route } from '@/lib/server/http';
 import { requireUser } from '@/lib/server/auth';
 import { classifyStory } from '@/lib/server/gemini';
+import type { Status } from '@/lib/types';
 
 // Two Gemini attempts of up to 10 s each (main model, then the lighter fallback).
 export const maxDuration = 25;
@@ -11,7 +12,13 @@ const schema = z.object({
   today: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   weekday: z.string().trim().min(1).max(20),
   // Teammate names help Gemini spot hand-offs. The client matches them to real people afterwards.
-  team: z.array(z.string().trim().min(1).max(80)).max(300).default([])
+  team: z.array(z.string().trim().min(1).max(80)).max(300).default([]),
+  // The speaker's open tasks, so "I finished the login fix" moves that card instead of adding a copy.
+  open: z.array(z.object({
+    id: z.uuid(),
+    title: z.string().trim().min(1).max(300),
+    status: z.number().int().min(0).max(4).transform((n) => n as Status)
+  })).max(80).default([])
 });
 
 // A small per-instance brake so one open tab cannot run up the Gemini bill.

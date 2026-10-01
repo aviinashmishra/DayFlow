@@ -222,9 +222,24 @@ export class DayflowStore {
   }
 
   // ---------- undo ----------
+  private undoBatch: Array<{ label: string; run: () => void }> | null = null;
   private pushUndo(label: string, run: () => void) {
+    if (this.undoBatch) { this.undoBatch.push({ label, run }); return; }
     this.undoStack.push({ label, run });
     if (this.undoStack.length > 40) this.undoStack.shift();
+  }
+  /** Runs `fn` and folds every undo step it records into one, so a whole spoken story undoes at once. */
+  undoGroup<T>(label: string, fn: () => T): T {
+    if (this.undoBatch) return fn();
+    const steps: Array<{ label: string; run: () => void }> = [];
+    this.undoBatch = steps;
+    try {
+      return fn();
+    } finally {
+      this.undoBatch = null;
+      if (steps.length === 1) this.pushUndo(steps[0].label, steps[0].run);
+      else if (steps.length) this.pushUndo(label, () => [...steps].reverse().forEach((s) => s.run()));
+    }
   }
   undo(): string | null {
     const u = this.undoStack.pop();
