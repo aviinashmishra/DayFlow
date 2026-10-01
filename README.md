@@ -70,9 +70,16 @@ npm run test:api  # full API test against a running server (npm start) and the r
 
 ## Deploy (Vercel)
 
-1. Push the repo and import it in Vercel.
-2. Add `DATABASE_URL` and `AUTH_SECRET` as environment variables, plus `GEMINI_API_KEY` for story mode.
-3. Run `npm run db:migrate` once against the production database.
+1. In Vercel, choose **Add New → Project** and import `aviinashmishra/DayFlow`. Vercel detects Next.js, so leave the build settings at their defaults.
+2. Under **Environment Variables**, add `DATABASE_URL` and `AUTH_SECRET`, plus `GEMINI_API_KEY` for story mode. Use a new `AUTH_SECRET` for production, not the one in your `.env.local`.
+3. Create the tables in the production database once, from your machine (it is safe to re-run):
+
+   ```bash
+   DATABASE_URL="postgresql://…production…" node scripts/migrate.mjs
+   ```
+
+   In PowerShell: `$env:DATABASE_URL="postgresql://…"; node scripts/migrate.mjs`
+4. Deploy. Every push to `main` deploys to production, and other branches get preview URLs.
 
 Voice input needs HTTPS, which Vercel provides.
 
